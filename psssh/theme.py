@@ -25,6 +25,7 @@ def _gray_palette() -> QPalette:
     alt_base = QColor(66, 66, 66)
     text = QColor(220, 220, 220)
     disabled_text = QColor(127, 127, 127)
+    placeholder_text = QColor(150, 150, 150)
     highlight = QColor(90, 140, 210)
 
     palette.setColor(QPalette.ColorRole.Window, window)
@@ -34,6 +35,7 @@ def _gray_palette() -> QPalette:
     palette.setColor(QPalette.ColorRole.ToolTipBase, text)
     palette.setColor(QPalette.ColorRole.ToolTipText, text)
     palette.setColor(QPalette.ColorRole.Text, text)
+    palette.setColor(QPalette.ColorRole.PlaceholderText, placeholder_text)
     palette.setColor(QPalette.ColorRole.Button, window)
     palette.setColor(QPalette.ColorRole.ButtonText, text)
     palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 90, 90))
@@ -44,6 +46,7 @@ def _gray_palette() -> QPalette:
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, disabled_text)
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, disabled_text)
     palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, disabled_text)
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText, disabled_text)
     return palette
 
 
