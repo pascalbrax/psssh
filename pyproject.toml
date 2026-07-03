@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "psssh"
+version = "0.1.0"
+description = "A powerful SSH/SFTP client with a Qt GUI, true-color terminal emulation and keepalive support."
+requires-python = ">=3.10"
+dependencies = [
+    "PyQt6>=6.9",
+    "paramiko>=3.5",
+    "pyte>=0.8",
+    "keyring>=24",
+]
+
+[project.scripts]
+psssh = "psssh.app:main"
+
+[tool.setuptools.packages.find]
+include = ["psssh*"]
+
+[tool.setuptools.package-data]
+psssh = ["assets/*"]
