@@ -395,7 +395,7 @@ class TerminalWidget(QWidget):
         if direction == 0:
             self._autoscroll_timer.stop()
         else:
-            self._autoscroll_col = self._sel_end.x() if self._sel_end else 0
+            self._autoscroll_col = self._sel_end.x() if self._sel_end is not None else 0
             self._autoscroll_timer.start()
 
     def _stop_autoscroll(self) -> None:
@@ -423,7 +423,10 @@ class TerminalWidget(QWidget):
         self.update()
 
     def _normalized_selection(self):
-        if not self._sel_start or not self._sel_end:
+        # Careful: QPoint(0, 0) is falsy in PyQt6 (it maps to Qt's isNull()),
+        # so a plain truthiness check here would wrongly treat a selection
+        # touching the terminal's very first cell as "no selection".
+        if self._sel_start is None or self._sel_end is None:
             return None
         if self._sel_start == self._sel_end:
             # A plain click (no drag) shouldn't paint a selection at all - real
@@ -503,6 +506,9 @@ class TerminalWidget(QWidget):
         text = self._selected_text()
         if text:
             QGuiApplication.clipboard().setText(text, QClipboard.Mode.Clipboard)
+            self._sel_start = None
+            self._sel_end = None
+            self.update()
 
     def _paste_clipboard(self) -> None:
         text = QGuiApplication.clipboard().text(QClipboard.Mode.Clipboard)
