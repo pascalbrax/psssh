@@ -99,6 +99,7 @@ class TerminalWidget(QWidget):
         self.screen = _Screen(80, 24, history=settings.scrollback_lines, ratio=0.12)
         self.stream = pyte.ByteStream(self.screen)
         self._title = ""
+        self._palette = colors.palette_for(settings.theme)
 
         self._font = QFont(settings.font_family, settings.font_size)
         self._font.setFixedPitch(True)
@@ -156,7 +157,7 @@ class TerminalWidget(QWidget):
     # -- painting ------------------------------------------------------
     def paintEvent(self, event: QPaintEvent) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor(f"#{colors.DEFAULT_BG}"))
+        painter.fillRect(self.rect(), QColor(f"#{self._palette.default_bg}"))
         painter.setFont(self._font)
 
         sel_range = self._normalized_selection()
@@ -185,8 +186,8 @@ class TerminalWidget(QWidget):
                     x += 1
                 run_end = x - 1
 
-                fg_color = colors.resolve(fg, colors.DEFAULT_FG)
-                bg_color = colors.resolve(bg, colors.DEFAULT_BG)
+                fg_color = colors.resolve(fg, self._palette.default_fg, self._palette.named)
+                bg_color = colors.resolve(bg, self._palette.default_bg, self._palette.named)
                 if reverse:
                     fg_color, bg_color = bg_color, fg_color
 
@@ -215,8 +216,10 @@ class TerminalWidget(QWidget):
 
         if not self.screen.cursor.hidden and self.hasFocus():
             cx, cy = self.screen.cursor.x, self.screen.cursor.y
+            cursor_color = QColor(f"#{self._palette.cursor_hex}")
+            cursor_color.setAlpha(120)
             painter.fillRect(cx * self._cell_w, cy * self._cell_h,
-                              self._cell_w, self._cell_h, QColor(255, 255, 255, 120))
+                              self._cell_w, self._cell_h, cursor_color)
 
     # -- keyboard --------------------------------------------------------
     def keyPressEvent(self, event: QKeyEvent) -> None:
@@ -459,4 +462,8 @@ class TerminalWidget(QWidget):
         self._cell_w = max(1, self._metrics.horizontalAdvance("M"))
         self._cell_h = max(1, self._metrics.height())
         self.resizeEvent(QResizeEvent(self.size(), self.size()))
+        self.update()
+
+    def apply_palette(self, theme: str) -> None:
+        self._palette = colors.palette_for(theme)
         self.update()

@@ -286,6 +286,7 @@ class MainWindow(QMainWindow):
                 widget = self.tabs.widget(i)
                 if isinstance(widget, SessionWidget):
                     widget.terminal.apply_font(self.settings.font_family, self.settings.font_size)
+                    widget.terminal.apply_palette(self.settings.theme)
 
     def _show_about(self) -> None:
         QMessageBox.about(self, "About Pascal Simple SSH",

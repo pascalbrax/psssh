@@ -20,6 +20,10 @@ terminal emulation, and SSH keepalive support.
   (mouse wheel, Shift+PageUp/PageDown), text selection (Ctrl+Shift+C to copy,
   Ctrl+Shift+V / Shift+Insert to paste), and copying a screenshot of just the
   terminal to the clipboard (right-click → Copy Screenshot, or View menu).
+- **Full-screen app support** — application cursor keys (DECCKM) and xterm
+  mouse reporting (click/drag/wheel, SGR 1006) are handled, so tools like
+  `mc`, `vim`, `htop` and `top` behave correctly; hold Shift to force local
+  text selection/scrollback while one of those has grabbed the mouse.
 - **SFTP panel** — optional right-hand file browser over the same connection:
   navigate, upload, download, rename, delete, create folders, and edit a
   remote file directly in an external editor of your choice (auto-uploads on
@@ -37,7 +41,9 @@ terminal emulation, and SSH keepalive support.
 - **Bookmarks** — save connections (host/user/port/key file) and optionally
   save the password too, stored securely in Windows Credential Manager (never
   in plain text) via [keyring](https://github.com/jaraco/keyring).
-- **Themes** — System or a flat Gray palette (Settings > Preferences).
+- **Themes** — System, Gray, Solarized, or Solarized Dark (Settings >
+  Preferences). Solarized and Solarized Dark also recolor the terminal itself
+  (background, text, cursor, and all 16 ANSI colors), not just the app chrome.
 
 ## Setup
 
@@ -74,11 +80,12 @@ psssh/
   host_keys.py                known_hosts verification + GUI prompts
   ssh_worker.py                 paramiko session thread (auth, PTY, keepalive)
   sftp_worker.py                  paramiko SFTP job-queue thread
-  terminal_widget.py                pyte + QPainter terminal emulator
-  sftp_panel.py                       remote file browser widget
-  session_widget.py                     terminal + SFTP panel for one connection
-  main_window.py                          tabs, menus, address bar, status bar
-  theme.py                                   System / Gray palette switching
+  colors.py                        named terminal color palettes (xterm, Solarized)
+  terminal_widget.py                 pyte + QPainter terminal emulator
+  sftp_panel.py                        remote file browser widget
+  session_widget.py                      terminal + SFTP panel for one connection
+  main_window.py                           tabs, menus, address bar, status bar
+  theme.py                                   app-chrome palette switching (System/Gray/Solarized)
   icon.py                                      app icon lookup
   dialogs/                                       Preferences, Bookmarks, Tunnels, Commands
   assets/icon.ico                                  app icon

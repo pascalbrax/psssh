@@ -1,7 +1,7 @@
-"""App-wide theme switching (native "system" look vs. a flat gray palette)."""
+"""App-wide widget-chrome theme switching (native "System" look, or a custom palette)."""
 from __future__ import annotations
 
-from typing import Optional
+from typing import Callable, Dict, Optional
 
 from PyQt6.QtGui import QColor, QPalette
 from PyQt6.QtWidgets import QApplication, QStyleFactory
@@ -18,43 +18,82 @@ def capture_defaults(app: QApplication) -> None:
         _default_palette = QPalette(app.palette())
 
 
-def _gray_palette() -> QPalette:
+def _build_palette(*, window: str, base: str, alt_base: str, text: str, disabled_text: str,
+                    placeholder_text: str, button: str, highlight: str,
+                    highlighted_text: str, bright_text: str) -> QPalette:
     palette = QPalette()
-    window = QColor(53, 53, 53)
-    base = QColor(42, 42, 42)
-    alt_base = QColor(66, 66, 66)
-    text = QColor(220, 220, 220)
-    disabled_text = QColor(127, 127, 127)
-    placeholder_text = QColor(150, 150, 150)
-    highlight = QColor(90, 140, 210)
 
-    palette.setColor(QPalette.ColorRole.Window, window)
-    palette.setColor(QPalette.ColorRole.WindowText, text)
-    palette.setColor(QPalette.ColorRole.Base, base)
-    palette.setColor(QPalette.ColorRole.AlternateBase, alt_base)
-    palette.setColor(QPalette.ColorRole.ToolTipBase, text)
-    palette.setColor(QPalette.ColorRole.ToolTipText, text)
-    palette.setColor(QPalette.ColorRole.Text, text)
-    palette.setColor(QPalette.ColorRole.PlaceholderText, placeholder_text)
-    palette.setColor(QPalette.ColorRole.Button, window)
-    palette.setColor(QPalette.ColorRole.ButtonText, text)
-    palette.setColor(QPalette.ColorRole.BrightText, QColor(255, 90, 90))
-    palette.setColor(QPalette.ColorRole.Link, highlight)
-    palette.setColor(QPalette.ColorRole.Highlight, highlight)
-    palette.setColor(QPalette.ColorRole.HighlightedText, QColor(20, 20, 20))
+    def c(hex_value: str) -> QColor:
+        return QColor(f"#{hex_value}")
 
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, disabled_text)
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, disabled_text)
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, disabled_text)
-    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText, disabled_text)
+    palette.setColor(QPalette.ColorRole.Window, c(window))
+    palette.setColor(QPalette.ColorRole.WindowText, c(text))
+    palette.setColor(QPalette.ColorRole.Base, c(base))
+    palette.setColor(QPalette.ColorRole.AlternateBase, c(alt_base))
+    palette.setColor(QPalette.ColorRole.ToolTipBase, c(text))
+    palette.setColor(QPalette.ColorRole.ToolTipText, c(text))
+    palette.setColor(QPalette.ColorRole.Text, c(text))
+    palette.setColor(QPalette.ColorRole.PlaceholderText, c(placeholder_text))
+    palette.setColor(QPalette.ColorRole.Button, c(button))
+    palette.setColor(QPalette.ColorRole.ButtonText, c(text))
+    palette.setColor(QPalette.ColorRole.BrightText, c(bright_text))
+    palette.setColor(QPalette.ColorRole.Link, c(highlight))
+    palette.setColor(QPalette.ColorRole.Highlight, c(highlight))
+    palette.setColor(QPalette.ColorRole.HighlightedText, c(highlighted_text))
+
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.Text, c(disabled_text))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.WindowText, c(disabled_text))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.ButtonText, c(disabled_text))
+    palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.PlaceholderText, c(disabled_text))
     return palette
+
+
+def _gray_palette() -> QPalette:
+    return _build_palette(
+        window="353535", base="2a2a2a", alt_base="424242", text="dcdcdc",
+        disabled_text="7f7f7f", placeholder_text="969696", button="353535",
+        highlight="5a8cd2", highlighted_text="141414", bright_text="ff5a5a",
+    )
+
+
+# Solarized (https://ethanschoonover.com/solarized/) base colors, shared by
+# both variants below - only which end of the scale is "background" flips.
+_SOL_BASE03, _SOL_BASE02 = "002b36", "073642"
+_SOL_BASE01, _SOL_BASE00 = "586e75", "657b83"
+_SOL_BASE0, _SOL_BASE1 = "839496", "93a1a1"
+_SOL_BASE2, _SOL_BASE3 = "eee8d5", "fdf6e3"
+_SOL_BLUE, _SOL_RED = "268bd2", "dc322f"
+
+
+def _solarized_light_palette() -> QPalette:
+    return _build_palette(
+        window=_SOL_BASE3, base=_SOL_BASE3, alt_base=_SOL_BASE2, text=_SOL_BASE00,
+        disabled_text=_SOL_BASE1, placeholder_text=_SOL_BASE1, button=_SOL_BASE2,
+        highlight=_SOL_BLUE, highlighted_text=_SOL_BASE3, bright_text=_SOL_RED,
+    )
+
+
+def _solarized_dark_palette() -> QPalette:
+    return _build_palette(
+        window=_SOL_BASE03, base=_SOL_BASE03, alt_base=_SOL_BASE02, text=_SOL_BASE0,
+        disabled_text=_SOL_BASE01, placeholder_text=_SOL_BASE01, button=_SOL_BASE02,
+        highlight=_SOL_BLUE, highlighted_text=_SOL_BASE3, bright_text=_SOL_RED,
+    )
+
+
+_PALETTE_BUILDERS: Dict[str, Callable[[], QPalette]] = {
+    "gray": _gray_palette,
+    "solarized": _solarized_light_palette,
+    "solarized_dark": _solarized_dark_palette,
+}
 
 
 def apply_theme(app: QApplication, theme: str) -> None:
     capture_defaults(app)
-    if theme == "gray":
+    builder = _PALETTE_BUILDERS.get(theme)
+    if builder is not None:
         app.setStyle(QStyleFactory.create("Fusion"))
-        app.setPalette(_gray_palette())
+        app.setPalette(builder())
     else:
         if _default_style_name:
             style = QStyleFactory.create(_default_style_name)

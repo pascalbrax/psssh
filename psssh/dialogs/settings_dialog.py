@@ -21,6 +21,8 @@ class SettingsDialog(QDialog):
         self.theme_combo = QComboBox()
         self.theme_combo.addItem("System", "system")
         self.theme_combo.addItem("Gray", "gray")
+        self.theme_combo.addItem("Solarized", "solarized")
+        self.theme_combo.addItem("Solarized Dark", "solarized_dark")
         self.theme_combo.setCurrentIndex(self.theme_combo.findData(settings.theme))
         form.addRow("Theme:", self.theme_combo)
 
