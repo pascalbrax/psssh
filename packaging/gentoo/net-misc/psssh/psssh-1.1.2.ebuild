@@ -5,9 +5,9 @@ EAPI=8
 
 DISTUTILS_USE_PEP517=setuptools
 DISTUTILS_SINGLE_IMPL=1
-PYTHON_COMPAT=( python3_{10..13} )
+PYTHON_COMPAT=( python3_12 python3_13 )
 
-inherit distutils-r1 xdg
+inherit distutils-r1 desktop xdg
 
 DESCRIPTION="Qt SSH/SFTP client with true-color terminal emulation (Pascal Simple SSH)"
 HOMEPAGE="https://github.com/pascalbrax/psssh"
@@ -20,13 +20,12 @@ S="${WORKDIR}/${PN}-${PV}"
 LICENSE="MIT"
 SLOT="0"
 KEYWORDS="~amd64"
-IUSE=""
 
 REQUIRED_USE="${PYTHON_REQUIRED_USE}"
 
 RDEPEND="
 	$(python_gen_cond_dep '
-		dev-python/PyQt6[gui,network,widgets,${PYTHON_USEDEP}]
+		dev-python/pyqt6[gui,network,widgets,${PYTHON_USEDEP}]
 		dev-python/paramiko[${PYTHON_USEDEP}]
 		dev-python/pyte[${PYTHON_USEDEP}]
 		dev-python/keyring[${PYTHON_USEDEP}]
