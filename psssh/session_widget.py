@@ -63,6 +63,7 @@ class SessionWidget(QWidget):
         self.status_changed.emit(f"Connected to {self.spec.label}")
         if self._want_sftp:
             self.show_sftp_panel(True)
+        self.terminal.setFocus()
 
     def _on_error(self, message: str) -> None:
         QMessageBox.critical(self, "Connection error", message)

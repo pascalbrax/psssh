@@ -13,6 +13,25 @@ from PyQt6.QtWidgets import QMenu, QWidget
 from . import colors
 from .settings import AppSettings
 
+
+class _Screen(pyte.HistoryScreen):
+    """
+    pyte's parser forwards a ``private=True`` flag to whichever CSI handler
+    matches the trailing character whenever the sequence starts with ``?``,
+    but only set_mode/reset_mode were written to accept it. Some full-screen
+    apps (e.g. Midnight Commander / S-Lang) send ``CSI ?1001r`` - "restore DEC
+    private mode values" - which happens to share its trailing 'r' with
+    DECSTBM (set_margins), so pyte calls ``set_margins(private=True)`` and
+    raises TypeError, crashing the whole app. pyte doesn't implement private
+    mode save/restore at all, so the correct behavior is just to ignore it.
+    """
+
+    def set_margins(self, *args, private: bool = False, **kwargs) -> None:
+        if private:
+            return
+        super().set_margins(*args, **kwargs)
+
+
 # xterm function-key escape sequences (normal, non-application mode).
 _FUNCTION_KEYS = {
     Qt.Key.Key_F1: b"\x1bOP", Qt.Key.Key_F2: b"\x1bOQ",
@@ -23,16 +42,42 @@ _FUNCTION_KEYS = {
     Qt.Key.Key_F11: b"\x1b[23~", Qt.Key.Key_F12: b"\x1b[24~",
 }
 
-_SIMPLE_KEYS = {
+# Cursor keys switch between CSI ("normal") and SS3 ("application") encoding
+# depending on DECCKM (CSI ?1h / ?1l) - full-screen apps like mc/vim/htop rely
+# on this switch, so hardcoding one form makes them misread arrow/home/end.
+_CURSOR_KEYS_NORMAL = {
     Qt.Key.Key_Up: b"\x1b[A", Qt.Key.Key_Down: b"\x1b[B",
     Qt.Key.Key_Right: b"\x1b[C", Qt.Key.Key_Left: b"\x1b[D",
     Qt.Key.Key_Home: b"\x1b[H", Qt.Key.Key_End: b"\x1b[F",
+}
+_CURSOR_KEYS_APPLICATION = {
+    Qt.Key.Key_Up: b"\x1bOA", Qt.Key.Key_Down: b"\x1bOB",
+    Qt.Key.Key_Right: b"\x1bOC", Qt.Key.Key_Left: b"\x1bOD",
+    Qt.Key.Key_Home: b"\x1bOH", Qt.Key.Key_End: b"\x1bOF",
+}
+
+_SIMPLE_KEYS = {
     Qt.Key.Key_Insert: b"\x1b[2~", Qt.Key.Key_Delete: b"\x1b[3~",
     Qt.Key.Key_PageUp: b"\x1b[5~", Qt.Key.Key_PageDown: b"\x1b[6~",
     Qt.Key.Key_Backtab: b"\x1b[Z",
     Qt.Key.Key_Return: b"\r", Qt.Key.Key_Enter: b"\r",
     Qt.Key.Key_Backspace: b"\x7f", Qt.Key.Key_Tab: b"\t",
     Qt.Key.Key_Escape: b"\x1b",
+}
+
+# DEC private mode numbers, as tracked in pyte's Screen.mode (shifted << 5 by
+# pyte itself to distinguish private modes from ANSI ones - see Screen.set_mode).
+_MODE_DECCKM = 1 << 5              # application cursor keys
+_MODE_MOUSE_X10 = 1000 << 5        # report button press+release only
+_MODE_MOUSE_BTN_EVENT = 1002 << 5  # also report motion while a button is held
+_MODE_MOUSE_ANY_EVENT = 1003 << 5  # report all motion, button held or not
+_MODE_MOUSE_SGR = 1006 << 5        # SGR extended coordinate encoding
+_MOUSE_REPORTING_MODES = {_MODE_MOUSE_X10, _MODE_MOUSE_BTN_EVENT, _MODE_MOUSE_ANY_EVENT}
+
+_MOUSE_BUTTON_CODES = {
+    Qt.MouseButton.LeftButton: 0,
+    Qt.MouseButton.MiddleButton: 1,
+    Qt.MouseButton.RightButton: 2,
 }
 
 
@@ -49,8 +94,9 @@ class TerminalWidget(QWidget):
         self.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.customContextMenuRequested.connect(self._show_context_menu)
         self.setCursor(Qt.CursorShape.IBeamCursor)
+        self.setMouseTracking(True)  # so any-event mouse reporting (mode 1003) gets motion too
 
-        self.screen = pyte.HistoryScreen(80, 24, history=settings.scrollback_lines, ratio=0.12)
+        self.screen = _Screen(80, 24, history=settings.scrollback_lines, ratio=0.12)
         self.stream = pyte.ByteStream(self.screen)
         self._title = ""
 
@@ -75,7 +121,15 @@ class TerminalWidget(QWidget):
 
     # -- incoming data ---------------------------------------------------
     def feed(self, data: bytes) -> None:
-        self.stream.feed(data)
+        try:
+            self.stream.feed(data)
+        except Exception:
+            # A malformed/unsupported escape sequence should never take down
+            # the whole app - worst case this redraw glitches, the session
+            # and app stay alive. (An unhandled exception here would otherwise
+            # propagate out of a Qt signal handler and abort the process.)
+            import traceback
+            traceback.print_exc()
         if self.screen.title != self._title:
             self._title = self.screen.title
             self.title_changed.emit(self._title)
@@ -188,6 +242,12 @@ class TerminalWidget(QWidget):
             self.data_to_send.emit(_FUNCTION_KEYS[key])
             return
 
+        if key in _CURSOR_KEYS_NORMAL:
+            cursor_keys = (_CURSOR_KEYS_APPLICATION if _MODE_DECCKM in self.screen.mode
+                           else _CURSOR_KEYS_NORMAL)
+            self.data_to_send.emit(cursor_keys[key])
+            return
+
         if key in _SIMPLE_KEYS:
             self.data_to_send.emit(_SIMPLE_KEYS[key])
             return
@@ -203,31 +263,92 @@ class TerminalWidget(QWidget):
 
         super().keyPressEvent(event)
 
-    # -- mouse: selection & scrollback -----------------------------------
+    # -- mouse: xterm mouse reporting, selection & scrollback -------------
     def _cell_at(self, pos: QPoint) -> QPoint:
         col = max(0, min(self.screen.columns - 1, pos.x() // self._cell_w))
         row = max(0, min(self.screen.lines - 1, pos.y() // self._cell_h))
         return QPoint(col, row)
 
+    def _mouse_reporting_enabled(self) -> bool:
+        return bool(self.screen.mode & _MOUSE_REPORTING_MODES)
+
+    def _send_mouse_report(self, pos: QPoint, button_code: int, pressed: bool,
+                            event: Optional[QMouseEvent] = None) -> None:
+        cell = self._cell_at(pos)
+        col, row = cell.x() + 1, cell.y() + 1
+        code = button_code
+        if event is not None:
+            mods = event.modifiers()
+            if mods & Qt.KeyboardModifier.ShiftModifier:
+                code |= 4
+            if mods & Qt.KeyboardModifier.AltModifier:
+                code |= 8
+            if mods & Qt.KeyboardModifier.ControlModifier:
+                code |= 16
+        if _MODE_MOUSE_SGR in self.screen.mode:
+            suffix = "M" if pressed else "m"
+            seq = f"\x1b[<{code};{col};{row}{suffix}".encode("ascii")
+        else:
+            # Legacy X10-style encoding: releases are always reported as code 3
+            # (there's no per-button release code), and coordinates are single
+            # bytes offset by 32, so they saturate rather than wrap past 223.
+            b = code if pressed else 3
+            seq = bytes([0x1B, 0x5B, 0x4D, 32 + (b & 0xFF), 32 + min(col, 223), 32 + min(row, 223)])
+        self.data_to_send.emit(seq)
+
+    @staticmethod
+    def _primary_button(buttons: Qt.MouseButton) -> Optional[Qt.MouseButton]:
+        for btn in (Qt.MouseButton.LeftButton, Qt.MouseButton.MiddleButton, Qt.MouseButton.RightButton):
+            if buttons & btn:
+                return btn
+        return None
+
     def mousePressEvent(self, event: QMouseEvent) -> None:
+        self.setFocus()
+        # Shift+click always forces local selection, matching xterm convention,
+        # so the terminal's own copy/paste stays reachable even in apps (mc,
+        # vim, htop, ...) that have grabbed mouse reporting for themselves.
+        if self._mouse_reporting_enabled() and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            code = _MOUSE_BUTTON_CODES.get(event.button())
+            if code is not None:
+                self._send_mouse_report(event.position().toPoint(), code, pressed=True, event=event)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self._selecting = True
             self._sel_start = self._cell_at(event.position().toPoint())
             self._sel_end = self._sel_start
             self.update()
-        self.setFocus()
 
     def mouseMoveEvent(self, event: QMouseEvent) -> None:
+        if self._mouse_reporting_enabled() and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            buttons = event.buttons()
+            primary = self._primary_button(buttons)
+            if primary is not None and _MODE_MOUSE_BTN_EVENT in self.screen.mode:
+                code = _MOUSE_BUTTON_CODES.get(primary, 0) | 32
+                self._send_mouse_report(event.position().toPoint(), code, pressed=True, event=event)
+            elif primary is None and _MODE_MOUSE_ANY_EVENT in self.screen.mode:
+                self._send_mouse_report(event.position().toPoint(), 3 | 32, pressed=True, event=event)
+            return
         if self._selecting:
             self._sel_end = self._cell_at(event.position().toPoint())
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        if self._mouse_reporting_enabled() and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            code = _MOUSE_BUTTON_CODES.get(event.button())
+            if code is not None:
+                self._send_mouse_report(event.position().toPoint(), code, pressed=False, event=event)
+            return
         if event.button() == Qt.MouseButton.LeftButton:
             self._selecting = False
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         notches = event.angleDelta().y() // 120
+        if self._mouse_reporting_enabled() and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
+            code = 64 if notches > 0 else 65  # wheel up / wheel down
+            for _ in range(abs(notches)):
+                self._send_mouse_report(event.position().toPoint(), code, pressed=True, event=event)
+            return
         for _ in range(abs(notches)):
             if notches > 0:
                 self.screen.prev_page()
