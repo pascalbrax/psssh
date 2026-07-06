@@ -4,7 +4,7 @@ from __future__ import annotations
 from typing import Optional
 
 import pyte
-from PyQt6.QtCore import QPoint, Qt, pyqtSignal
+from PyQt6.QtCore import QPoint, QTimer, Qt, pyqtSignal
 from PyQt6.QtGui import (QClipboard, QColor, QFont, QFontMetrics, QGuiApplication,
                           QKeyEvent, QMouseEvent, QPainter, QPaintEvent, QResizeEvent,
                           QWheelEvent)
@@ -72,6 +72,7 @@ _MODE_MOUSE_X10 = 1000 << 5        # report button press+release only
 _MODE_MOUSE_BTN_EVENT = 1002 << 5  # also report motion while a button is held
 _MODE_MOUSE_ANY_EVENT = 1003 << 5  # report all motion, button held or not
 _MODE_MOUSE_SGR = 1006 << 5        # SGR extended coordinate encoding
+_MODE_BRACKETED_PASTE = 2004 << 5  # wrap pasted text in ESC[200~ ... ESC[201~
 _MOUSE_REPORTING_MODES = {_MODE_MOUSE_X10, _MODE_MOUSE_BTN_EVENT, _MODE_MOUSE_ANY_EVENT}
 
 _MOUSE_BUTTON_CODES = {
@@ -85,6 +86,7 @@ class TerminalWidget(QWidget):
     data_to_send = pyqtSignal(bytes)
     size_changed = pyqtSignal(int, int)  # cols, rows
     title_changed = pyqtSignal(str)
+    screenshot_taken = pyqtSignal()
 
     def __init__(self, settings: AppSettings, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
@@ -112,6 +114,12 @@ class TerminalWidget(QWidget):
         self._selecting = False
         self._sel_start: Optional[QPoint] = None
         self._sel_end: Optional[QPoint] = None
+
+        self._autoscroll_timer = QTimer(self)
+        self._autoscroll_timer.setInterval(80)
+        self._autoscroll_timer.timeout.connect(self._autoscroll_tick)
+        self._autoscroll_dir = 0  # -1 = scrolling up, +1 = scrolling down, 0 = idle
+        self._autoscroll_col = 0
 
         self.setMinimumSize(self._cell_w * 10, self._cell_h * 4)
 
@@ -239,10 +247,7 @@ class TerminalWidget(QWidget):
             return
 
         if mods & Qt.KeyboardModifier.ShiftModifier and key in (Qt.Key.Key_PageUp, Qt.Key.Key_PageDown):
-            if key == Qt.Key.Key_PageUp:
-                self.screen.prev_page()
-            else:
-                self.screen.next_page()
+            self._scroll_view(prev=key == Qt.Key.Key_PageUp)
             self.update()
             return
 
@@ -276,6 +281,27 @@ class TerminalWidget(QWidget):
         col = max(0, min(self.screen.columns - 1, pos.x() // self._cell_w))
         row = max(0, min(self.screen.lines - 1, pos.y() // self._cell_h))
         return QPoint(col, row)
+
+    def _scroll_view(self, prev: bool) -> None:
+        """
+        Page the scrollback via pyte, keeping any selection anchored to the
+        same lines. pyte's HistoryScreen doesn't grow a taller buffer when you
+        scroll - it swaps which content occupies the existing row indices, so
+        a selection recorded as "row 2" would silently start pointing at
+        different text after scrolling unless we shift it by exactly how far
+        the view moved.
+        """
+        before = self.screen.history.position
+        if prev:
+            self.screen.prev_page()
+        else:
+            self.screen.next_page()
+        delta = self.screen.history.position - before
+        if delta:
+            if self._sel_start is not None:
+                self._sel_start = QPoint(self._sel_start.x(), self._sel_start.y() - delta)
+            if self._sel_end is not None:
+                self._sel_end = QPoint(self._sel_end.x(), self._sel_end.y() - delta)
 
     def _mouse_reporting_enabled(self) -> bool:
         return bool(self.screen.mode & _MOUSE_REPORTING_MODES)
@@ -338,10 +364,13 @@ class TerminalWidget(QWidget):
                 self._send_mouse_report(event.position().toPoint(), 3 | 32, pressed=True, event=event)
             return
         if self._selecting:
-            self._sel_end = self._cell_at(event.position().toPoint())
+            pos = event.position()
+            self._sel_end = self._cell_at(pos.toPoint())
+            self._update_autoscroll(pos.y())
             self.update()
 
     def mouseReleaseEvent(self, event: QMouseEvent) -> None:
+        self._stop_autoscroll()
         if self._mouse_reporting_enabled() and not (event.modifiers() & Qt.KeyboardModifier.ShiftModifier):
             code = _MOUSE_BUTTON_CODES.get(event.button())
             if code is not None:
@@ -349,6 +378,38 @@ class TerminalWidget(QWidget):
             return
         if event.button() == Qt.MouseButton.LeftButton:
             self._selecting = False
+
+    def _update_autoscroll(self, y: float) -> None:
+        """Start/stop continuous scrolling while a drag-selection is held past
+        the terminal's top/bottom edge, so a selection can span more content
+        than fits on one screen without needing the mouse wheel."""
+        if y < 0:
+            direction = -1
+        elif y >= self.height():
+            direction = 1
+        else:
+            direction = 0
+        if direction == self._autoscroll_dir:
+            return
+        self._autoscroll_dir = direction
+        if direction == 0:
+            self._autoscroll_timer.stop()
+        else:
+            self._autoscroll_col = self._sel_end.x() if self._sel_end else 0
+            self._autoscroll_timer.start()
+
+    def _stop_autoscroll(self) -> None:
+        self._autoscroll_dir = 0
+        self._autoscroll_timer.stop()
+
+    def _autoscroll_tick(self) -> None:
+        if not self._selecting or self._autoscroll_dir == 0:
+            self._stop_autoscroll()
+            return
+        self._scroll_view(prev=self._autoscroll_dir < 0)
+        edge_row = 0 if self._autoscroll_dir < 0 else self.screen.lines - 1
+        self._sel_end = QPoint(self._autoscroll_col, edge_row)
+        self.update()
 
     def wheelEvent(self, event: QWheelEvent) -> None:
         notches = event.angleDelta().y() // 120
@@ -358,10 +419,7 @@ class TerminalWidget(QWidget):
                 self._send_mouse_report(event.position().toPoint(), code, pressed=True, event=event)
             return
         for _ in range(abs(notches)):
-            if notches > 0:
-                self.screen.prev_page()
-            else:
-                self.screen.next_page()
+            self._scroll_view(prev=notches > 0)
         self.update()
 
     def _normalized_selection(self):
@@ -405,6 +463,25 @@ class TerminalWidget(QWidget):
         if run_end > sx1:
             yield (sx1 + 1, run_end, False)
 
+    def _row_at(self, virtual_y: int):
+        """
+        Look up a row by viewport-relative index, which - once a selection has
+        survived a scroll via _scroll_view() - may be negative (above the
+        current top of screen) or >= lines (below it, only reachable while
+        paged up). screen.buffer only ever holds the current viewport, so rows
+        outside it have to come from pyte's own history deques instead;
+        falls back to None if that content isn't retained anymore.
+        """
+        if 0 <= virtual_y < self.screen.lines:
+            return self.screen.buffer[virtual_y]
+        if virtual_y < 0:
+            top = self.screen.history.top
+            idx = len(top) + virtual_y
+            return top[idx] if 0 <= idx < len(top) else None
+        bottom = self.screen.history.bottom
+        idx = virtual_y - self.screen.lines
+        return bottom[idx] if 0 <= idx < len(bottom) else None
+
     def _selected_text(self) -> str:
         sel_range = self._normalized_selection()
         if not sel_range:
@@ -412,7 +489,10 @@ class TerminalWidget(QWidget):
         y0, x0, y1, x1 = sel_range
         lines = []
         for y in range(y0, y1 + 1):
-            row = self.screen.buffer[y]
+            row = self._row_at(y)
+            if row is None:
+                lines.append("")
+                continue
             start = x0 if y == y0 else 0
             end = x1 if y == y1 else self.screen.columns - 1
             text = "".join((row[x].data or " ") for x in range(start, end + 1))
@@ -426,13 +506,24 @@ class TerminalWidget(QWidget):
 
     def _paste_clipboard(self) -> None:
         text = QGuiApplication.clipboard().text(QClipboard.Mode.Clipboard)
-        if text:
-            self.data_to_send.emit(text.encode("utf-8"))
+        if not text:
+            return
+        # A real Enter keypress sends a bare CR (see _SIMPLE_KEYS), and line
+        # editors (nano, vim, bash) expect pasted newlines to match that; left
+        # as \n they can be ignored or misapplied, garbling multi-line pastes.
+        normalized = text.replace("\r\n", "\n").replace("\r", "\n").replace("\n", "\r")
+        data = normalized.encode("utf-8")
+        if _MODE_BRACKETED_PASTE in self.screen.mode:
+            # Tell the remote app this text was pasted, not typed, so it skips
+            # per-keystroke behavior like auto-indent on it (mode 2004).
+            data = b"\x1b[200~" + data + b"\x1b[201~"
+        self.data_to_send.emit(data)
 
     def screenshot_to_clipboard(self) -> None:
         """Render just this widget (no SFTP panel) to the clipboard as an image."""
         pixmap = self.grab()
         QGuiApplication.clipboard().setPixmap(pixmap, QClipboard.Mode.Clipboard)
+        self.screenshot_taken.emit()
 
     def _show_context_menu(self, pos: QPoint) -> None:
         menu = QMenu(self)

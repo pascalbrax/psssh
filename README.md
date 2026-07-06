@@ -16,10 +16,17 @@ terminal emulation, and SSH keepalive support.
 - **Tabbed sessions** — open multiple connections at once.
 - **Terminal emulation** — built on [pyte](https://github.com/selectel/pyte),
   rendered with QPainter; supports 16-color, 256-color and 24-bit truecolor
-  (SGR 38/48;2/5), bold/italic/underline/strikethrough/reverse, scrollback
-  (mouse wheel, Shift+PageUp/PageDown), text selection (Ctrl+Shift+C to copy,
-  Ctrl+Shift+V / Shift+Insert to paste), and copying a screenshot of just the
-  terminal to the clipboard (right-click → Copy Screenshot, or View menu).
+  (SGR 38/48;2/5), bold/italic/underline/strikethrough/reverse, and scrollback
+  (mouse wheel, Shift+PageUp/PageDown).
+- **Text selection & clipboard** — drag to select (Ctrl+Shift+C to copy,
+  Ctrl+Shift+V / Shift+Insert to paste); dragging past the top/bottom edge
+  auto-scrolls so a selection can span more than one screen, and copying still
+  works correctly even after scrolling mid-selection. Pasted text is
+  normalized to real Enter keystrokes and wrapped for bracketed-paste mode
+  when the remote app supports it (nano, vim, bash), so multi-line pastes
+  don't get mangled. Copying a screenshot of just the terminal to the
+  clipboard (right-click → Copy Screenshot, or View menu) shows a status bar
+  confirmation.
 - **Full-screen app support** — application cursor keys (DECCKM) and xterm
   mouse reporting (click/drag/wheel, SGR 1006) are handled, so tools like
   `mc`, `vim`, `htop` and `top` behave correctly; hold Shift to force local

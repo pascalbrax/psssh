@@ -55,6 +55,8 @@ class SessionWidget(QWidget):
         self.terminal.data_to_send.connect(self.ssh_worker.send)
         self.terminal.size_changed.connect(self.ssh_worker.resize)
         self.terminal.title_changed.connect(self.title_changed)
+        self.terminal.screenshot_taken.connect(
+            lambda: self.status_changed.emit("Terminal screenshot copied to clipboard"))
 
     def start(self) -> None:
         self.ssh_worker.start()

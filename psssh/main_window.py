@@ -223,7 +223,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Copy Terminal Screenshot", "Open a connection first.")
             return
         session.terminal.screenshot_to_clipboard()
-        self.statusBar().showMessage("Terminal screenshot copied to clipboard", 4000)
 
     def _manage_tunnels(self) -> None:
         session = self.tabs.currentWidget()
