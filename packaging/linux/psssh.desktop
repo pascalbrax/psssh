@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Pascal Simple SSH
+GenericName=SSH Client
+Comment=A powerful SSH/SFTP client with true-color terminal emulation
+Exec=psssh
+Icon=psssh
+Terminal=false
+Categories=Network;RemoteAccess;
+StartupNotify=true

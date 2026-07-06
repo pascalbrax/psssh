@@ -74,6 +74,12 @@ python -m venv .venv
 
 The one-folder build is written to `dist\PascalSimpleSSH\PascalSimpleSSH.exe`.
 
+## Gentoo
+
+An ebuild lives in `packaging/gentoo/net-misc/psssh/` for anyone who'd rather
+not use pip/venv directly - see `packaging/gentoo/README.md` for how to test
+it locally and submit it to [GURU](https://github.com/gentoo/guru).
+
 ## Project layout
 
 ```
@@ -98,4 +104,11 @@ psssh/
   assets/icon.ico                                  app icon
   app.py                                             QApplication entry point
 psssh.spec            PyInstaller build spec
+packaging/
+  linux/psssh.desktop  freedesktop .desktop entry
+  gentoo/              ebuilds (see packaging/gentoo/README.md)
 ```
+
+## License
+
+MIT - see [LICENSE](LICENSE).

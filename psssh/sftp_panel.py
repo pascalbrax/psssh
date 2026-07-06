@@ -5,6 +5,7 @@ import os
 import posixpath
 import shlex
 import subprocess
+import sys
 import tempfile
 from datetime import datetime
 from typing import Dict, List, Optional
@@ -245,10 +246,14 @@ class SftpPanel(QWidget):
                 if os.path.isfile(editor_command):
                     cmd = [editor_command, local]
                 else:
-                    cmd = shlex.split(editor_command, posix=False) + [local]
+                    cmd = shlex.split(editor_command, posix=sys.platform != "win32") + [local]
                 subprocess.Popen(cmd)
-            else:
+            elif sys.platform == "win32":
                 os.startfile(local)  # noqa: S606 - opens with the OS-registered default app
+            elif sys.platform == "darwin":
+                subprocess.Popen(["open", local])
+            else:
+                subprocess.Popen(["xdg-open", local])
         except Exception as exc:  # noqa: BLE001
             self._status.setText(f"Could not launch editor: {exc}")
             return

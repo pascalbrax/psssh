@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE pkgmetadata SYSTEM "https://www.gentoo.org/dtd/metadata.dtd">
+<pkgmetadata>
+	<maintainer type="person">
+		<email>pascalbrax@gmail.com</email>
+		<name>Pascal Braile</name>
+	</maintainer>
+	<longdescription>
+		Pascal Simple SSH is a Qt-based SSH/SFTP client with true-color and
+		256-color terminal emulation, tabbed sessions, SSH keepalive, local
+		and remote port forwarding, an SFTP file browser with
+		external-editor support, saved bookmarks with optional
+		securely-stored passwords, and System/Gray/Solarized color themes.
+	</longdescription>
+	<upstream>
+		<remote-id type="github">pascalbrax/psssh</remote-id>
+	</upstream>
+</pkgmetadata>
