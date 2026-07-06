@@ -160,18 +160,19 @@ class TerminalWidget(QWidget):
         painter.setFont(self._font)
 
         sel_range = self._normalized_selection()
+        columns = self.screen.columns
 
         for y in range(self.screen.lines):
             row = self.screen.buffer[y]
+            sel_cols = self._selection_cols_for_row(sel_range, y, columns)
             x = 0
-            columns = self.screen.columns
             while x < columns:
                 char = row[x]
                 fg, bg, bold, underscore, italics, strike, reverse = (
                     char.fg, char.bg, char.bold, char.underscore,
                     char.italics, char.strikethrough, char.reverse,
                 )
-                run_text = [char.data or " "]
+                run_chars = [char.data or " "]
                 run_start = x
                 x += 1
                 while x < columns:
@@ -180,33 +181,37 @@ class TerminalWidget(QWidget):
                             nxt.strikethrough, nxt.reverse) != (fg, bg, bold, underscore,
                                                                   italics, strike, reverse):
                         break
-                    run_text.append(nxt.data or " ")
+                    run_chars.append(nxt.data or " ")
                     x += 1
+                run_end = x - 1
 
                 fg_color = colors.resolve(fg, colors.DEFAULT_FG)
                 bg_color = colors.resolve(bg, colors.DEFAULT_BG)
                 if reverse:
                     fg_color, bg_color = bg_color, fg_color
 
-                run_len = x - run_start
-                cell_rect_x = run_start * self._cell_w
-                cell_rect_y = y * self._cell_h
-                rect_w = run_len * self._cell_w
+                # Selection boundaries rarely align with attribute-run boundaries
+                # (e.g. a whole blank line is usually one run) - split the run so
+                # only the actually-selected cells get highlighted.
+                for seg_start, seg_end, selected in self._split_run_by_selection(
+                        run_start, run_end, sel_cols):
+                    seg_text = "".join(run_chars[seg_start - run_start:seg_end - run_start + 1])
+                    seg_bg = QColor("#3a6ea5") if selected else bg_color
 
-                if self._in_selection(sel_range, y, run_start, x - 1):
-                    bg_color = QColor("#3a6ea5")
+                    cell_rect_x = seg_start * self._cell_w
+                    cell_rect_y = y * self._cell_h
+                    rect_w = (seg_end - seg_start + 1) * self._cell_w
 
-                painter.fillRect(cell_rect_x, cell_rect_y, rect_w, self._cell_h, bg_color)
+                    painter.fillRect(cell_rect_x, cell_rect_y, rect_w, self._cell_h, seg_bg)
 
-                font = QFont(self._font)
-                font.setBold(bool(bold))
-                font.setItalic(bool(italics))
-                font.setUnderline(bool(underscore))
-                font.setStrikeOut(bool(strike))
-                painter.setFont(font)
-                painter.setPen(fg_color)
-                painter.drawText(cell_rect_x, cell_rect_y + self._metrics.ascent(),
-                                  "".join(run_text))
+                    font = QFont(self._font)
+                    font.setBold(bool(bold))
+                    font.setItalic(bool(italics))
+                    font.setUnderline(bool(underscore))
+                    font.setStrikeOut(bool(strike))
+                    painter.setFont(font)
+                    painter.setPen(fg_color)
+                    painter.drawText(cell_rect_x, cell_rect_y + self._metrics.ascent(), seg_text)
 
         if not self.screen.cursor.hidden and self.hasFocus():
             cx, cy = self.screen.cursor.x, self.screen.cursor.y
@@ -359,25 +364,43 @@ class TerminalWidget(QWidget):
     def _normalized_selection(self):
         if not self._sel_start or not self._sel_end:
             return None
+        if self._sel_start == self._sel_end:
+            # A plain click (no drag) shouldn't paint a selection at all - real
+            # terminals only start highlighting once the mouse actually moves
+            # to a different cell.
+            return None
         a, b = self._sel_start, self._sel_end
         if (a.y(), a.x()) <= (b.y(), b.x()):
             return (a.y(), a.x(), b.y(), b.x())
         return (b.y(), b.x(), a.y(), a.x())
 
     @staticmethod
-    def _in_selection(sel_range, row, col_start, col_end) -> bool:
+    def _selection_cols_for_row(sel_range, row: int, columns: int) -> Optional[tuple]:
+        """Inclusive (start, end) column range selected on this row, or None."""
         if not sel_range:
-            return False
+            return None
         y0, x0, y1, x1 = sel_range
         if row < y0 or row > y1:
-            return False
-        if y0 == y1:
-            return not (col_end < x0 or col_start > x1)
-        if row == y0:
-            return col_end >= x0
-        if row == y1:
-            return col_start <= x1
-        return True
+            return None
+        start = x0 if row == y0 else 0
+        end = x1 if row == y1 else columns - 1
+        return (start, end)
+
+    @staticmethod
+    def _split_run_by_selection(run_start: int, run_end: int, sel_cols: Optional[tuple]):
+        """Split [run_start, run_end] into (seg_start, seg_end, selected) pieces."""
+        if not sel_cols:
+            yield (run_start, run_end, False)
+            return
+        sx0, sx1 = sel_cols
+        if sx1 < run_start or sx0 > run_end:
+            yield (run_start, run_end, False)
+            return
+        if run_start < sx0:
+            yield (run_start, sx0 - 1, False)
+        yield (max(run_start, sx0), min(run_end, sx1), True)
+        if run_end > sx1:
+            yield (sx1 + 1, run_end, False)
 
     def _selected_text(self) -> str:
         sel_range = self._normalized_selection()

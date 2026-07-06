@@ -5,6 +5,7 @@ import sys
 
 from PyQt6.QtWidgets import QApplication
 
+from . import __version__
 from .icon import app_icon
 from .main_window import MainWindow
 from .settings import AppSettings
@@ -16,6 +17,7 @@ def main() -> int:
     app.setApplicationName("psssh")
     app.setOrganizationName("psssh")
     app.setApplicationDisplayName("Pascal Simple SSH")
+    app.setApplicationVersion(__version__)
     app.setWindowIcon(app_icon())
     capture_defaults(app)
     apply_theme(app, AppSettings().theme)

@@ -5,7 +5,7 @@ from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (QComboBox, QInputDialog, QLabel, QMainWindow, QMessageBox,
                               QTabWidget, QToolBar)
 
-from . import secrets_store
+from . import __version__, secrets_store
 from .bookmarks import Bookmark, BookmarkManager
 from .commands import CommandManager
 from .connection import ConnectionSpec
@@ -289,7 +289,7 @@ class MainWindow(QMainWindow):
 
     def _show_about(self) -> None:
         QMessageBox.about(self, "About Pascal Simple SSH",
-                           "Pascal Simple SSH — a powerful SSH/SFTP client\n\n"
+                           f"Pascal Simple SSH v{__version__} — a powerful SSH/SFTP client\n\n"
                            "Built with PyQt6, paramiko and pyte.")
 
     def closeEvent(self, event) -> None:
