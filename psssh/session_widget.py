@@ -19,12 +19,14 @@ from .tunnel import TunnelManager
 class SessionWidget(QWidget):
     status_changed = pyqtSignal(str)
     title_changed = pyqtSignal(str)
+    connection_state_changed = pyqtSignal(str)
 
     def __init__(self, spec: ConnectionSpec, settings: AppSettings, parent: Optional[QWidget] = None,
                  initial_password: Optional[str] = None) -> None:
         super().__init__(parent)
         self.spec = spec
         self.settings = settings
+        self.connection_state = "Connecting…"
         self.tunnel_manager = TunnelManager(lambda: self.ssh_worker.transport)
 
         self.host_key_gate = HostKeyGate()
@@ -48,9 +50,9 @@ class SessionWidget(QWidget):
                                      initial_password=initial_password)
         self.ssh_worker.data_received.connect(self.terminal.feed)
         self.ssh_worker.connected.connect(self._on_connected)
-        self.ssh_worker.status_changed.connect(self.status_changed)
+        self.ssh_worker.status_changed.connect(self._on_status)
         self.ssh_worker.error_occurred.connect(self._on_error)
-        self.ssh_worker.session_closed.connect(self.status_changed)
+        self.ssh_worker.session_closed.connect(self._on_session_closed)
 
         self.terminal.data_to_send.connect(self.ssh_worker.send)
         self.terminal.size_changed.connect(self.ssh_worker.resize)
@@ -61,15 +63,30 @@ class SessionWidget(QWidget):
     def start(self) -> None:
         self.ssh_worker.start()
 
+    def _set_connection_state(self, text: str) -> None:
+        self.connection_state = text
+        self.connection_state_changed.emit(text)
+
+    def _on_status(self, message: str) -> None:
+        self._set_connection_state(message)
+        self.status_changed.emit(message)
+
     def _on_connected(self) -> None:
-        self.status_changed.emit(f"Connected to {self.spec.label}")
+        text = f"Connected to {self.spec.label}"
+        self._set_connection_state(text)
+        self.status_changed.emit(text)
         if self._want_sftp:
             self.show_sftp_panel(True)
         self.terminal.setFocus()
 
     def _on_error(self, message: str) -> None:
+        self._set_connection_state(f"Error: {message}")
         QMessageBox.critical(self, "Connection error", message)
         self.status_changed.emit(f"Error: {message}")
+
+    def _on_session_closed(self, message: str) -> None:
+        self._set_connection_state(message)
+        self.status_changed.emit(message)
 
     def show_sftp_panel(self, show: bool) -> None:
         if show and self.sftp_panel is None:

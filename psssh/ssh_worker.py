@@ -120,7 +120,13 @@ class SSHWorker(QThread):
                     break
                 self.data_received.emit(chunk)
 
-            self.session_closed.emit("Connection closed")
+            # _stop_flag is only ever set by stop() (tab closed, app exiting),
+            # so if the loop exited without it, the remote end went away on
+            # its own - a dropped connection, not a requested disconnect.
+            if self._stop_flag.is_set():
+                self.session_closed.emit("Disconnected")
+            else:
+                self.session_closed.emit("Connection lost")
         except paramiko.AuthenticationException:
             self.error_occurred.emit("Authentication failed")
         except Exception as exc:  # noqa: BLE001 - surface any connection failure to the GUI

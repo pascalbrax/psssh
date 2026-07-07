@@ -38,6 +38,9 @@ class MainWindow(QMainWindow):
 
         self._build_toolbar()
         self._build_menu()
+
+        self.connection_status_label = QLabel("No connection")
+        self.statusBar().addPermanentWidget(self.connection_status_label)
         self.statusBar().showMessage("Ready")
 
     # -- toolbar / menu construction --------------------------------------
@@ -187,6 +190,9 @@ class MainWindow(QMainWindow):
         self.tabs.setCurrentIndex(index)
         session.status_changed.connect(lambda msg, s=session: self._on_session_status(s, msg))
         session.title_changed.connect(lambda title, s=session: self._on_session_title(s, title))
+        session.connection_state_changed.connect(
+            lambda text, s=session: self._on_connection_state_changed(s, text))
+        self._refresh_connection_status_label()
         session.start()
 
     def _on_session_status(self, session: SessionWidget, message: str) -> None:
@@ -197,6 +203,17 @@ class MainWindow(QMainWindow):
         idx = self.tabs.indexOf(session)
         if idx >= 0 and title:
             self.tabs.setTabText(idx, title)
+
+    def _on_connection_state_changed(self, session: SessionWidget, text: str) -> None:
+        if self.tabs.currentWidget() is session:
+            self.connection_status_label.setText(text)
+
+    def _refresh_connection_status_label(self) -> None:
+        session = self.tabs.currentWidget()
+        if isinstance(session, SessionWidget):
+            self.connection_status_label.setText(session.connection_state)
+        else:
+            self.connection_status_label.setText("No connection")
 
     def _close_tab(self, index: int) -> None:
         widget = self.tabs.widget(index)
@@ -210,6 +227,7 @@ class MainWindow(QMainWindow):
         session = self.tabs.widget(index)
         if isinstance(session, SessionWidget):
             self.toggle_sftp_action.setChecked(session.is_sftp_visible())
+        self._refresh_connection_status_label()
 
     def _toggle_sftp_panel(self) -> None:
         session = self.tabs.currentWidget()
