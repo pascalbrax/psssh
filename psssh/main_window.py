@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from PyQt6.QtGui import QAction, QKeySequence
 from PyQt6.QtWidgets import (QComboBox, QInputDialog, QLabel, QMainWindow, QMessageBox,
-                              QTabWidget, QToolBar)
+                              QTabWidget, QToolBar, QWidget)
 
 from . import __version__, secrets_store
 from .bookmarks import Bookmark, BookmarkManager
@@ -14,6 +14,7 @@ from .dialogs.command_dialog import CommandManagerDialog
 from .dialogs.settings_dialog import SettingsDialog
 from .dialogs.tunnel_dialog import TunnelManagerDialog
 from .icon import app_icon
+from .local_shell_widget import LocalShellWidget
 from .session_widget import SessionWidget
 from .settings import AppSettings
 
@@ -42,6 +43,8 @@ class MainWindow(QMainWindow):
         self.connection_status_label = QLabel("No connection")
         self.statusBar().addPermanentWidget(self.connection_status_label)
         self.statusBar().showMessage("Ready")
+
+        self._open_local_shell()
 
     # -- toolbar / menu construction --------------------------------------
     def _build_toolbar(self) -> None:
@@ -192,6 +195,23 @@ class MainWindow(QMainWindow):
         session.title_changed.connect(lambda title, s=session: self._on_session_title(s, title))
         session.connection_state_changed.connect(
             lambda text, s=session: self._on_connection_state_changed(s, text))
+        session.connection_failed.connect(lambda s=session: self._on_connection_failed(s))
+        self._refresh_connection_status_label()
+        session.start()
+
+    def _on_connection_failed(self, session: QWidget) -> None:
+        index = self.tabs.indexOf(session)
+        if index >= 0:
+            self._close_tab(index)
+
+    def _open_local_shell(self) -> None:
+        session = LocalShellWidget(self.settings)
+        index = self.tabs.addTab(session, "Local")
+        self.tabs.setCurrentIndex(index)
+        session.status_changed.connect(lambda msg, s=session: self._on_session_status(s, msg))
+        session.connection_state_changed.connect(
+            lambda text, s=session: self._on_connection_state_changed(s, text))
+        session.connection_failed.connect(lambda s=session: self._on_connection_failed(s))
         self._refresh_connection_status_label()
         session.start()
 
@@ -210,7 +230,7 @@ class MainWindow(QMainWindow):
 
     def _refresh_connection_status_label(self) -> None:
         session = self.tabs.currentWidget()
-        if isinstance(session, SessionWidget):
+        if isinstance(session, (SessionWidget, LocalShellWidget)):
             self.connection_status_label.setText(session.connection_state)
         else:
             self.connection_status_label.setText("No connection")
@@ -227,6 +247,8 @@ class MainWindow(QMainWindow):
         session = self.tabs.widget(index)
         if isinstance(session, SessionWidget):
             self.toggle_sftp_action.setChecked(session.is_sftp_visible())
+        else:
+            self.toggle_sftp_action.setChecked(False)
         self._refresh_connection_status_label()
 
     def _toggle_sftp_panel(self) -> None:

@@ -2,3 +2,4 @@ PyQt6>=6.9
 paramiko>=3.5
 pyte>=0.8
 keyring>=24
+pywinpty>=2.0; sys_platform == "win32"

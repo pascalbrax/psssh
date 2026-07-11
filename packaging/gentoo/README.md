@@ -17,12 +17,12 @@ opening a PR against [GURU](https://github.com/gentoo/guru), please still:
    `v${PV}` extracts to a `psssh-${PV}` directory (GitHub strips the leading
    "v"). Confirm once with:
    ```
-   wget -qO- https://github.com/pascalbrax/psssh/archive/refs/tags/v1.1.2.tar.gz | tar -tz | head -1
+   wget -qO- https://github.com/pascalbrax/psssh/archive/refs/tags/v1.1.3.tar.gz | tar -tz | head -1
    ```
 3. **Generate the Manifest:**
    ```
    cd net-misc/psssh
-   ebuild psssh-1.1.2.ebuild manifest
+   ebuild psssh-1.1.3.ebuild manifest
    ```
 4. **Test-build:**
    ```

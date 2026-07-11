@@ -20,6 +20,7 @@ class SessionWidget(QWidget):
     status_changed = pyqtSignal(str)
     title_changed = pyqtSignal(str)
     connection_state_changed = pyqtSignal(str)
+    connection_failed = pyqtSignal()
 
     def __init__(self, spec: ConnectionSpec, settings: AppSettings, parent: Optional[QWidget] = None,
                  initial_password: Optional[str] = None) -> None:
@@ -27,6 +28,7 @@ class SessionWidget(QWidget):
         self.spec = spec
         self.settings = settings
         self.connection_state = "Connecting…"
+        self._connected = False
         self.tunnel_manager = TunnelManager(lambda: self.ssh_worker.transport)
 
         self.host_key_gate = HostKeyGate()
@@ -72,6 +74,7 @@ class SessionWidget(QWidget):
         self.status_changed.emit(message)
 
     def _on_connected(self) -> None:
+        self._connected = True
         text = f"Connected to {self.spec.label}"
         self._set_connection_state(text)
         self.status_changed.emit(text)
@@ -83,6 +86,10 @@ class SessionWidget(QWidget):
         self._set_connection_state(f"Error: {message}")
         QMessageBox.critical(self, "Connection error", message)
         self.status_changed.emit(f"Error: {message}")
+        if not self._connected:
+            # Never got a shell open (e.g. auth failed after the password
+            # prompt) - there's nothing in this tab worth keeping around.
+            self.connection_failed.emit()
 
     def _on_session_closed(self, message: str) -> None:
         self._set_connection_state(message)

@@ -8,19 +8,22 @@ Build (one-folder distribution):
 
 Output goes to dist/PascalSimpleSSH/PascalSimpleSSH.exe
 """
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_all, collect_submodules
+
+winpty_datas, winpty_binaries, winpty_hidden_imports = collect_all("winpty")
 
 hidden_imports = (
     collect_submodules("paramiko")
     + collect_submodules("pyte")
     + collect_submodules("keyring.backends")
+    + winpty_hidden_imports
 )
 
 a = Analysis(
     ["psssh/__main__.py"],
     pathex=[],
-    binaries=[],
-    datas=[("psssh/assets", "psssh/assets")],
+    binaries=winpty_binaries,
+    datas=[("psssh/assets", "psssh/assets")] + winpty_datas,
     hiddenimports=hidden_imports,
     hookspath=[],
     hooksconfig={},

@@ -10,6 +10,9 @@ terminal emulation, and SSH keepalive support.
 
 ## Features
 
+- **Local shell tab** — a "Local" tab running your OS default shell
+  (PowerShell on Windows, `$SHELL` on Linux/macOS) opens automatically on
+  startup, using the same terminal emulator as SSH sessions.
 - **Free-form address bar** — type `host`, `user@host`, `user@host:port`,
   `ssh://user@host:port`, or `[ipv6]:port` and hit Enter to connect. A
   dropdown remembers your last 20 connections.
@@ -92,6 +95,8 @@ psssh/
   tunnel.py                 local/remote SSH port forwarding
   host_keys.py                known_hosts verification + GUI prompts
   ssh_worker.py                 paramiko session thread (auth, PTY, keepalive)
+  local_shell_worker.py          local shell pty thread (ConPTY / stdlib pty)
+  local_shell_widget.py           terminal tab for the local shell
   sftp_worker.py                  paramiko SFTP job-queue thread
   colors.py                        named terminal color palettes (xterm, Solarized)
   terminal_widget.py                 pyte + QPainter terminal emulator
