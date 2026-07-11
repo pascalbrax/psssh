@@ -1,7 +1,7 @@
 """Application preferences, persisted via QSettings (registry-backed on Windows)."""
 from __future__ import annotations
 
-from PyQt6.QtCore import QSettings
+from PyQt6.QtCore import QByteArray, QSettings
 
 ORG_NAME = "psssh"
 APP_NAME = "psssh"
@@ -21,6 +21,14 @@ class AppSettings:
     @theme.setter
     def theme(self, value: str) -> None:
         self._qs.setValue("ui/theme", value)
+
+    @property
+    def window_geometry(self) -> QByteArray:
+        return self._qs.value("ui/window_geometry", QByteArray(), type=QByteArray)
+
+    @window_geometry.setter
+    def window_geometry(self, value: QByteArray) -> None:
+        self._qs.setValue("ui/window_geometry", value)
 
     # -- keepalive -----------------------------------------------------
     @property

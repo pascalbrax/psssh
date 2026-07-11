@@ -220,7 +220,17 @@ class TerminalWidget(QWidget):
                     font.setStrikeOut(bool(strike))
                     painter.setFont(font)
                     painter.setPen(fg_color)
-                    painter.drawText(cell_rect_x, cell_rect_y + self._metrics.ascent(), seg_text)
+                    # Drawing seg_text as one string would let Qt's text shaper
+                    # position each glyph by the font's true fractional advance,
+                    # which drifts from the integer cell grid over a long run
+                    # (e.g. Cascadia Code's ~8.78px advance rounds up to a 9px
+                    # cell - a 20-char line ends up ~4px narrower than the grid
+                    # expects) and throws the cursor/selection rects visibly out
+                    # of alignment with the actual glyphs. Position every
+                    # character at its own cell instead, so it can never drift.
+                    baseline_y = cell_rect_y + self._metrics.ascent()
+                    for i, ch in enumerate(seg_text):
+                        painter.drawText((seg_start + i) * self._cell_w, baseline_y, ch)
 
         if not self.screen.cursor.hidden and self.hasFocus():
             cx, cy = self.screen.cursor.x, self.screen.cursor.y

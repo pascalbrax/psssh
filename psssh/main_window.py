@@ -28,7 +28,8 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle("Pascal Simple SSH")
         self.setWindowIcon(app_icon())
-        self.resize(1000, 650)
+        if not self.restoreGeometry(self.settings.window_geometry):
+            self.resize(1000, 650)
 
         self.tabs = QTabWidget()
         self.tabs.setTabsClosable(True)
@@ -333,8 +334,9 @@ class MainWindow(QMainWindow):
                            "Built with PyQt6, paramiko and pyte.")
 
     def closeEvent(self, event) -> None:
+        self.settings.window_geometry = self.saveGeometry()
         for i in range(self.tabs.count()):
             widget = self.tabs.widget(i)
-            if isinstance(widget, SessionWidget):
+            if isinstance(widget, (SessionWidget, LocalShellWidget)):
                 widget.stop()
         super().closeEvent(event)
