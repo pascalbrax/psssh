@@ -79,6 +79,11 @@ class MainWindow(QMainWindow):
         new_conn.triggered.connect(lambda: self.address_combo.setFocus())
         file_menu.addAction(new_conn)
 
+        new_local_shell = QAction("New &Local Shell Tab", self)
+        new_local_shell.setShortcut(QKeySequence("Ctrl+Shift+N"))
+        new_local_shell.triggered.connect(self._open_local_shell)
+        file_menu.addAction(new_local_shell)
+
         close_tab = QAction("&Close Tab", self)
         close_tab.setShortcut(QKeySequence("Ctrl+W"))
         close_tab.triggered.connect(lambda: self._close_tab(self.tabs.currentIndex()))

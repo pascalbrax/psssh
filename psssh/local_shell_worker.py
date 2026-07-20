@@ -19,7 +19,8 @@ def default_shell_command() -> str:
 
 def _windows_shell_command() -> str:
     import shutil
-    return shutil.which("powershell.exe") or os.environ.get("COMSPEC") or "cmd.exe"
+    return (shutil.which("powershell.exe") or os.environ.get("COMSPEC")
+            or shutil.which("cmd.exe") or "cmd.exe")
 
 
 class LocalShellWorker(QThread):
@@ -64,21 +65,25 @@ class LocalShellWorker(QThread):
                 "(pip install pywinpty)."
             ) from exc
 
-        shell = default_shell_command()
-        pty = winpty.PtyProcess.spawn([shell], dimensions=(self._rows, self._cols))
+        # Talk to the low-level PTY directly instead of winpty's PtyProcess
+        # wrapper: PtyProcess relays reads through an extra background thread
+        # plus a loopback TCP socket, with a hardcoded 1ms sleep after every
+        # single read/forward cycle - regardless of chunk size. PowerShell's
+        # PSReadLine issues many small separate writes per keystroke (cursor
+        # repositioning, syntax highlighting), so each one got individually
+        # throttled by that sleep, which is what made typing feel so slow.
+        pty = winpty.PTY(self._cols, self._rows)
+        pty.spawn(default_shell_command())
         self._win_pty = pty
         self.connected.emit()
 
         while not self._stop_flag.is_set():
             try:
-                data = pty.read(4096)
-            except EOFError:
-                break
+                data = pty.read(blocking=True)
             except Exception:
                 break
-            if not data:
-                break
-            self.data_received.emit(data.encode("utf-8", errors="replace"))
+            if data:
+                self.data_received.emit(data.encode("utf-8", errors="replace"))
             if not pty.isalive():
                 break
 
@@ -148,7 +153,7 @@ class LocalShellWorker(QThread):
         if sys.platform == "win32":
             if self._win_pty is not None:
                 try:
-                    self._win_pty.setwinsize(rows, cols)
+                    self._win_pty.set_size(cols, rows)
                 except Exception:
                     pass
         else:
@@ -159,7 +164,19 @@ class LocalShellWorker(QThread):
         if sys.platform == "win32":
             if self._win_pty is not None:
                 try:
-                    self._win_pty.close()
+                    # The low-level PTY has no close(); cancel_io() unblocks
+                    # the read loop's pending blocking read so it can notice
+                    # _stop_flag and exit.
+                    self._win_pty.cancel_io()
+                except Exception:
+                    pass
+                try:
+                    # cancel_io() doesn't touch the child process itself - without
+                    # this, the shell (e.g. powershell.exe) is left running as an
+                    # orphan after the tab closes. os.kill() on Windows maps
+                    # SIGTERM to TerminateProcess.
+                    if self._win_pty.isalive():
+                        os.kill(self._win_pty.pid, signal.SIGTERM)
                 except Exception:
                     pass
         else:
